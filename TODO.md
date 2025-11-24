@@ -17,5 +17,3 @@
 ```
 Creative Commons License
 
-Este trabalho está sob licença Creative Commons.
-Você pode copiar, modificar e distribuir este projeto.
