@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Ticket - Sistema de Atendimento</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState } = React;
+        
+        // Ícones simples
+        const Icons = {
+            Users: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+            UserCheck: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+            Monitor: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
+            TrendingUp: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>,
+            Clock: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+            FileText: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+        };
+
+        const WebTicket = () => {
+            const [tickets, setTickets] = useState([]);
+            const [currentTicket, setCurrentTicket] = useState(null);
+            const [role, setRole] = useState('cliente');
+            const [stats, setStats] = useState({
+                totalEmitidas: 0,
+                totalAtendidas: 0,
+                porPrioridade: { SP: 0, SG: 0, SE: 0 }
+            });
+
+            const SENHA_TIPOS = {
+                SP: { nome: 'Prioritária', tm: 15, cor: 'bg-red-500' },
+                SG: { nome: 'Geral', tm: 5, cor: 'bg-blue-500' },
+                SE: { nome: 'Exames', tm: 1, cor: 'bg-green-500' }
+            };
+
+            const gerarNumeroSenha = (tipo) => {
+                const agora = new Date();
+                const yy = String(agora.getFullYear()).slice(-2);
+                const mm = String(agora.getMonth() + 1).padStart(2, '0');
+                const dd = String(agora.getDate()).padStart(2, '0');
+                const sq = String(tickets.filter(t => t.tipo === tipo).length + 1).padStart(4, '0');
+                return `${yy}${mm}${dd}-${tipo}${sq}`;
+            };
+
+            const emitirSenha = (tipo) => {
+                const novaSenha = {
+                    numero: gerarNumeroSenha(tipo),
+                    tipo: tipo,
+                    horarioEmissao: new Date(),
+                    status: 'aguardando',
+                    guiche: null,
+                    horarioAtendimento: null
+                };
+                
+                setTickets(prev => [...prev, novaSenha]);
+                setStats(prev => ({
+                    ...prev,
+                    totalEmitidas: prev.totalEmitidas + 1,
+                    porPrioridade: {
+                        ...prev.porPrioridade,
+                        [tipo]: prev.porPrioridade[tipo] + 1
+                    }
+                }));
+                
+                alert(`Senha emitida: ${novaSenha.numero}\nDirija-se ao painel de atendimento`);
+            };
+
+            const chamarProximaSenha = (guicheNum) => {
+                const horaAtual = new Date().getHours();
+                
+                if (horaAtual < 7 || horaAtual >= 17) {
+                    alert('Fora do horário de expediente (7h às 17h)');
+                    return;
+                }
+
+                const aguardando = tickets.filter(t => t.status === 'aguardando');
+                
+                if (aguardando.length === 0) {
+                    alert('Não há senhas na fila');
+                    return;
+                }
+
+                let proximaSenha = null;
+                const sp = aguardando.find(t => t.tipo === 'SP');
+                
+                if (sp) {
+                    proximaSenha = sp;
+                } else {
+                    const seOuSg = aguardando.find(t => t.tipo === 'SE' || t.tipo === 'SG');
+                    proximaSenha = seOuSg;
+                }
+
+                if (proximaSenha) {
+                    const senhaAtualizada = {
+                        ...proximaSenha,
+                        status: 'chamado',
+                        guiche: guicheNum,
+                        horarioAtendimento: new Date()
+                    };
+                    
+                    setTickets(prev => prev.map(t => 
+                        t.numero === proximaSenha.numero ? senhaAtualizada : t
+                    ));
+                    setCurrentTicket(senhaAtualizada);
+                    alert(`CHAMANDO SENHA ${senhaAtualizada.numero}\nGUICHÊ ${guicheNum}`);
+                }
+            };
+
+            const finalizarAtendimento = () => {
+                if (!currentTicket) {
+                    alert('Nenhum atendimento em andamento');
+                    return;
+                }
+
+                setTickets(prev => prev.map(t => 
+                    t.numero === currentTicket.numero ? { ...t, status: 'atendido' } : t
+                ));
+                
+                setStats(prev => ({
+                    ...prev,
+                    totalAtendidas: prev.totalAtendidas + 1
+                }));
+                
+                setCurrentTicket(null);
+                alert('Atendimento finalizado com sucesso');
+            };
+
+            const obterUltimasChamadas = () => {
+                return tickets
+                    .filter(t => t.status === 'chamado' || t.status === 'atendido')
+                    .slice(-5)
+                    .reverse();
+            };
+
+            const gerarRelatorio = () => {
+                const emitidas = tickets.length;
+                const atendidas = tickets.filter(t => t.status === 'atendido').length;
+                const aguardando = tickets.filter(t => t.status === 'aguardando').length;
+                
+                const porTipo = {
+                    SP: tickets.filter(t => t.tipo === 'SP').length,
+                    SG: tickets.filter(t => t.tipo === 'SG').length,
+                    SE: tickets.filter(t => t.tipo === 'SE').length
+                };
+
+                const atendimentosCompletos = tickets.filter(t => t.status === 'atendido' && t.horarioAtendimento);
+                const tempoMedio = atendimentosCompletos.length > 0
+                    ? atendimentosCompletos.reduce((acc, t) => {
+                        const diff = (t.horarioAtendimento - t.horarioEmissao) / 60000;
+                        return acc + diff;
+                    }, 0) / atendimentosCompletos.length
+                    : 0;
+
+                return { emitidas, atendidas, aguardando, porTipo, tempoMedio: tempoMedio.toFixed(1) };
+            };
+
+            const relatorio = gerarRelatorio();
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+                    <div className="bg-white shadow-md border-b-4 border-blue-600">
+                        <div className="container mx-auto px-4 py-6">
+                            <div className="flex items-center justify-between flex-wrap gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-blue-600 p-3 rounded-lg">
+                                        <Icons.Monitor />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-3xl font-bold text-gray-800">Web Ticket</h1>
+                                        <p className="text-sm text-gray-600">Sistema de Controle de Atendimento</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setRole('cliente')}
+                                        className={`px-4 py-2 rounded-lg font-medium transition ${
+                                            role === 'cliente'
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Cliente
+                                    </button>
+                                    <button
+                                        onClick={() => setRole('atendente')}
+                                        className={`px-4 py-2 rounded-lg font-medium transition ${
+                                            role === 'atendente'
+                                                ? 'bg-green-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Atendente
+                                    </button>
+                                    <button
+                                        onClick={() => setRole('sistema')}
+                                        className={`px-4 py-2 rounded-lg font-medium transition ${
+                                            role === 'sistema'
+                                                ? 'bg-purple-600 text-white'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                        }`}
+                                    >
+                                        Sistema
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="container mx-auto px-4 py-8">
+                        {role === 'cliente' && (
+                            <div className="max-w-4xl mx-auto">
+                                <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <Icons.Users />
+                                        <h2 className="text-2xl font-bold text-gray-800">Emitir Senha de Atendimento</h2>
+                                    </div>
+                                    
+                                    <p className="text-gray-600 mb-8">Selecione o tipo de atendimento desejado:</p>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {Object.entries(SENHA_TIPOS).map(([codigo, info]) => (
+                                            <button
+                                                key={codigo}
+                                                onClick={() => emitirSenha(codigo)}
+                                                className={`${info.cor} hover:opacity-90 text-white p-6 rounded-xl transition transform hover:scale-105 shadow-lg`}
+                                            >
+                                                <div className="text-4xl font-bold mb-2">{codigo}</div>
+                                                <div className="text-lg font-semibold mb-1">{info.nome}</div>
+                                                <div className="text-sm opacity-90">Tempo médio: {info.tm} min</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="bg-white rounded-xl shadow-lg p-6">
+                                    <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                        <Icons.TrendingUp />
+                                        Estatísticas de Hoje
+                                    </h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="bg-blue-50 p-4 rounded-lg">
+                                            <div className="text-2xl font-bold text-blue-600">{relatorio.emitidas}</div>
+                                            <div className="text-sm text-gray-600">Emitidas</div>
+                                        </div>
+                                        <div className="bg-green-50 p-4 rounded-lg">
+                                            <div className="text-2xl font-bold text-green-600">{relatorio.atendidas}</div>
+                                            <div className="text-sm text-gray-600">Atendidas</div>
+                                        </div>
+                                        <div className="bg-yellow-50 p-4 rounded-lg">
+                                            <div className="text-2xl font-bold text-yellow-600">{relatorio.aguardando}</div>
+                                            <div className="text-sm text-gray-600">Aguardando</div>
+                                        </div>
+                                        <div className="bg-purple-50 p-4 rounded-lg">
+                                            <div className="text-2xl font-bold text-purple-600">{relatorio.tempoMedio}</div>
+                                            <div className="text-sm text-gray-600">TM (min)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {role === 'atendente' && (
+                            <div className="max-w-4xl mx-auto">
+                                <div className="bg-white rounded-xl shadow-lg p-8">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <Icons.UserCheck />
+                                        <h2 className="text-2xl font-bold text-gray-800">Painel do Atendente</h2>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Número do Guichê
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="guicheInput"
+                                            placeholder="Digite o número do guichê"
+                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-green-600 focus:outline-none"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                        <button
+                                            onClick={() => {
+                                                const guiche = document.getElementById('guicheInput').value;
+                                                if (!guiche) {
+                                                    alert('Por favor, informe o número do guichê');
+                                                    return;
+                                                }
+                                                chamarProximaSenha(guiche);
+                                            }}
+                                            className="bg-green-600 hover:bg-green-700 text-white py-4 px-6 rounded-lg font-semibold transition shadow-lg"
+                                        >
+                                            Chamar Próxima Senha
+                                        </button>
+                                        <button
+                                            onClick={finalizarAtendimento}
+                                            className="bg-blue-600 hover:bg-blue-700 text-white py-4 px-6 rounded-lg font-semibold transition shadow-lg"
+                                        >
+                                            Finalizar Atendimento
+                                        </button>
+                                    </div>
+
+                                    {currentTicket && (
+                                        <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-6 mb-6">
+                                            <h3 className="text-xl font-bold text-gray-800 mb-3">Atendimento Atual</h3>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <span className="text-sm text-gray-600">Senha:</span>
+                                                    <div className="text-2xl font-bold text-blue-600">{currentTicket.numero}</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm text-gray-600">Tipo:</span>
+                                                    <div className="text-xl font-semibold">{SENHA_TIPOS[currentTicket.tipo].nome}</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm text-gray-600">Guichê:</span>
+                                                    <div className="text-xl font-semibold">{currentTicket.guiche}</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm text-gray-600">Hora:</span>
+                                                    <div className="text-xl font-semibold">
+                                                        {currentTicket.horarioAtendimento?.toLocaleTimeString('pt-BR', {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="mt-6">
+                                        <h3 className="text-lg font-bold text-gray-800 mb-3">Fila de Espera</h3>
+                                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                                            {tickets.filter(t => t.status === 'aguardando').length === 0 ? (
+                                                <p className="text-gray-500 text-center py-4">Nenhuma senha aguardando</p>
+                                            ) : (
+                                                tickets
+                                                    .filter(t => t.status === 'aguardando')
+                                                    .map(t => (
+                                                        <div key={t.numero} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                                                            <span className="font-semibold">{t.numero}</span>
+                                                            <span className={`px-3 py-1 rounded-full text-white text-sm ${SENHA_TIPOS[t.tipo].cor}`}>
+                                                                {t.tipo}
+                                                            </span>
+                                                            <span className="text-sm text-gray-600">
+                                                                {t.horarioEmissao.toLocaleTimeString('pt-BR', {
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </span>
+                                                        </div>
+                                                    ))
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {role === 'sistema' && (
+                            <div className="max-w-6xl mx-auto">
+                                <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl shadow-2xl p-8 text-white">
+                                    <div className="text-center mb-8">
+                                        <h2 className="text-4xl font-bold mb-2">PAINEL DE ATENDIMENTO</h2>
+                                        <div className="text-xl text-gray-300">
+                                            {new Date().toLocaleDateString('pt-BR', {
+                                                weekday: 'long',
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            })} - {new Date().toLocaleTimeString('pt-BR')}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                        <div className="bg-white/10 backdrop-blur rounded-lg p-6">
+                                            <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                                                <Icons.Clock />
+                                                Últimas Chamadas
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {obterUltimasChamadas().length === 0 ? (
+                                                    <p className="text-gray-400 text-center py-4">Nenhuma chamada ainda</p>
+                                                ) : (
+                                                    obterUltimasChamadas().map((t, idx) => (
+                                                        <div
+                                                            key={t.numero}
+                                                            className={`p-4 rounded-lg ${idx === 0 ? 'bg-yellow-500/20 border-2 border-yellow-500' : 'bg-white/5'}`}
+                                                        >
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-2xl font-bold">{t.numero}</span>
+                                                                <span className="text-3xl font-bold">GUICHÊ {t.guiche}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white/10 backdrop-blur rounded-lg p-6">
+                                            <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                                                <Icons.FileText />
+                                                Relatório do Dia
+                                            </h3>
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-lg">
+                                                    <span>Total Emitidas:</span>
+                                                    <span className="text-2xl font-bold">{relatorio.emitidas}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-lg">
+                                                    <span>Total Atendidas:</span>
+                                                    <span className="text-2xl font-bold text-green-400">{relatorio.atendidas}</span>
+                                                </div>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <div className="p-3 bg-red-500/20 rounded-lg text-center">
+                                                        <div className="text-sm">SP</div>
+                                                        <div className="text-xl font-bold">{relatorio.porTipo.SP}</div>
+                                                    </div>
+                                                    <div className="p-3 bg-blue-500/20 rounded-lg text-center">
+                                                        <div className="text-sm">SG</div>
+                                                        <div className="text-xl font-bold">{relatorio.porTipo.SG}</div>
+                                                    </div>
+                                                    <div className="p-3 bg-green-500/20 rounded-lg text-center">
+                                                        <div className="text-sm">SE</div>
+                                                        <div className="text-xl font-bold">{relatorio.porTipo.SE}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-center p-3 bg-white/5 rounded-lg">
+                                                    <span>Tempo Médio:</span>
+                                                    <span className="text-2xl font-bold text-purple-400">{relatorio.tempoMedio} min</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="text-center text-gray-400 text-sm">
+                                        Sistema desenvolvido para controle de atendimento em laboratórios médicos
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<WebTicket />, document.getElementById('root'));
+    </script>
+</body>
+</html>
